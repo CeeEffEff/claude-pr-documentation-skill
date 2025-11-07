@@ -26,3 +26,5 @@ node_modules/
 
 .taskmaster
 .continue/mcpServers
+
+memory_bank/analysisResults

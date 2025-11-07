@@ -19,15 +19,95 @@ Important Notes:
 - LLM-guided entity identification is used to recognize business logic, configuration, services, and other components
 - The workflow leverages an extended Neo4j schema for more detailed PR insights
 - the `gh` command is available to you and you are authenticated already
-
+.github/pull_request_template.md
 <inputs>
-  repo_url:
-    description: 'Repository URL'
+  pr_url:
+    description: 'Pull Request URL'
+      required: true
+  repo_dir:
+    description: 'Repository local directory root'
     required: true
   pr_number:
     description: 'Pull Request number'
     required: true
 </inputs>
+
+## Worktree Naming Convention
+
+When analyzing PR files, agents may need to work with different versions of the codebase concurrently. Git worktrees provide an efficient way to have multiple working directories from the same repository without creating full clones.
+
+### Naming Pattern Format
+
+Use the following naming pattern for worktrees:
+
+```
+{repo-name}-pr{pr_number}-wt-{unique_identifier}
+```
+
+### Example
+
+```
+dst-python-ci-pr316-wt-file-analyzer-1
+```
+
+This indicates:
+- Repository: `dst-python-ci`
+- Pull Request: #316
+- Purpose: worktree for file analyzer agent #1
+
+### Rationale
+
+1. **Uniqueness**: The pattern ensures each worktree has a distinct name, preventing conflicts when multiple agents work concurrently
+2. **Traceability**: The name clearly identifies which PR and agent the worktree belongs to
+3. **Context Clarity**: Anyone can immediately understand the purpose and scope of the worktree
+4. **Easy Cleanup**: The consistent naming pattern makes it simple to identify and remove worktrees when work is complete
+
+### When to Use Worktrees vs Clones
+
+**Use Worktrees when:**
+- Working within the same repository on different branches or commits
+- Need to analyze multiple versions of files simultaneously
+- Want to save disk space (worktrees share the same .git directory)
+- Performing temporary analysis that will be cleaned up shortly
+
+**Use Clones when:**
+- Working with different repositories entirely
+- Need complete isolation with separate git histories
+- Long-term parallel development on different features
+
+### Creating a Worktree
+
+Parent agents should create worktrees before delegating to file-analyzer agents:
+
+```bash
+git worktree add ../{worktree_name} {branch_name}
+```
+
+Example:
+```bash
+git worktree add ../dst-python-ci-pr316-wt-file-analyzer-1 pr-316-branch
+```
+
+### Cleaning Up Worktrees
+
+After analysis is complete, remove the worktree:
+
+```bash
+git worktree remove {worktree_name}
+```
+
+Or if the worktree directory was already deleted:
+
+```bash
+git worktree prune
+```
+
+### Important Notes
+
+- **Parent Agent Responsibility**: Parent agents should create worktrees before delegation to ensure proper setup and avoid naming conflicts
+- **Concurrent Work**: Each file-analyzer agent should have its own uniquely named worktree
+- **Cleanup**: Always clean up worktrees after analysis is complete to avoid clutter and resource consumption
+- **Location**: Worktrees should be created in a sibling directory (using `../`) to keep them organized and separate from the main repository
 
 <detailed_sequence_of_steps>
 
@@ -38,7 +118,7 @@ Important Notes:
 1. Get the PR title, description, and other metadata:
 
     ```bash
-    gh pr view ${inputs.pr_number} --repo ${inputs.repo_url} --json title,body,number,files,author,createdAt,updatedAt,state
+    gh pr view ${inputs.pr_url} --json title,body,number,files,author,createdAt,updatedAt,state,changedFiles
     ```
 
 2. Store PR information in the Neo4j memory server:
@@ -117,26 +197,21 @@ Important Notes:
 1. Get the base commit and branch information of the PR:
 
     ```bash
-    gh pr view ${inputs.pr_number} --repo ${inputs.repo_url} --json baseRefName,baseRefOid,title,body --jq '{baseRefName, baseRefOid, headRefOid, title, body}'
+    gh pr view ${inputs.pr_url} --json baseRefName,baseRefOid,headRefOid,title,body --jq '{baseRefName, baseRefOid, headRefOid, title, body}'
     ```
 
-2. Initialize progress tracking for file analysis:
-
-    ```bash
-    gh pr view ${inputs.pr_number} --repo ${inputs.repo_url} --json changedFiles
-    ```
-
-3. For each modified file:
+2. For each modified file, one at a time then loop until all done:
 
     1. Understand the file as it was before this PR changes:
 
         Read the content:
 
         ```bash
-          git show "$base_commit:$file_path"
+        cd $repo_dor && git show "$baseRefOid:$file_path"
         ```
 
-        Please identify entities and their relationships as defined in .clinerules/neo4j-schema.md
+        Please identify any entities and relationships in that file content and map to .clinerules/neo4j-schema-pr.md.
+        Also make any insightful observations about the entity (free text).
         Analyse and store understanding in neo4j:
 
         ```xml
@@ -144,14 +219,14 @@ Important Notes:
         <server_name>mcp-neo4j-memory</server_name>
         <tool_name>create_entities</tool_name>
         <arguments>
-        [entities discovered from analysing the file, with any observations]
+        [entities that you discovered from analysing the "before" file, with any observations. Must match the schema]
         </arguments>
         </use_mcp_tool>
         <use_mcp_tool>
         <server_name>mcp-neo4j-memory</server_name>
         <tool_name>create_relations</tool_name>
         <arguments>
-        [relations discovered from analysing the file]
+         [relations that you discovered from analysing the "before" file. Must match the schema]
         </arguments>
         </use_mcp_tool>
         ```
@@ -161,10 +236,11 @@ Important Notes:
         Read the file changes:
 
         ```bash
-        git show "$base_commit..$head_commit" -- $file_path
+        cd $repo_dor && git show "$base_commit..$head_commit" -- $file_path
         ```
 
-        Please identify entities and their relationships as defined in .clinerules/neo4j-schema.md
+        Please identify any entities and relationships in that file content and map to .clinerules/neo4j-schema-pr.md
+        Also make any insightful observations about the entity (free text).
 
         For each identified entity, provide:
         - Entity type (e.g. BusinessLogic, Configuration, Service, Dependency, Schema, Infrastructure, Pipeline, Concept)

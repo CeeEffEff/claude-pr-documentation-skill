@@ -14,6 +14,10 @@ The PR Documentation Generator follows a sequential processing architecture:
 - **Context Management Pattern**: Explicit context management is implemented to handle large PRs with many files.
 - **Continuation Task Pattern**: When context size approaches limits, the workflow creates continuation tasks with essential information preserved.
 - **Schema Definition Pattern**: A standardized schema defines approved entity and relation types for the Neo4j memory server.
+- **Workflow Structure Pattern**: All workflows follow a consistent structure defined in `.clinerules/workflow-creation.md`.
+- **Input Parameter Pattern**: Input parameters are defined in a standardized format with descriptions and required flags.
+- **Tool Invocation Pattern**: MCP tool invocations follow a consistent XML structure.
+- **Command Execution Pattern**: Commands are executed using bash code blocks with consistent formatting.
 
 ## Component Interactions
 - **PR Information Retrieval**: Uses GitHub CLI to fetch PR metadata and modified files with error handling

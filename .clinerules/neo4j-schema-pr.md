@@ -1,12 +1,12 @@
 ---
-description: Guidelines for using the Neo4j memory server with approved entity and relation types
-globs: **/*
-alwaysApply: true
+description: Guidelines for using the Neo4j memory server with PR documentation workflows
+globs: **/pr-*.md, **/pr-documentation-generator.md
+alwaysApply: false
 ---
 
-# Neo4j Memory Server Schema
+# PR Documentation Neo4j Schema
 
-This document defines the approved entity types and relation types that can be used with the Neo4j memory server via MCP tools. Any new types must get approval from a user before adding and use.
+This document defines the approved entity types and relation types that can be used with the Neo4j memory server via MCP tools for PR documentation workflows. Any new types must get approval from a user before adding and use.
 
 ## Entity Types
 
